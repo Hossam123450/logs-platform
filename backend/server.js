@@ -21,6 +21,58 @@ fastify.register(formbody);
 // Routes
 fastify.get('/alerts', getAlerts);
 fastify.get('/logs', getLogs);
+// Backend : Route pour récupérer les erreurs groupées
+fastify.get('/logs/grouped-errors', async (request, reply) => {
+  try {
+    const groupedErrors = await Log.findAll({
+      attributes: [
+        'message',
+        [Sequelize.fn('COUNT', Sequelize.col('message')), 'count'],
+        [Sequelize.fn('MAX', Sequelize.col('timestamp')), 'lastOccurrence']
+      ],
+      group: ['message'],
+      order: [[Sequelize.fn('COUNT', Sequelize.col('message')), 'DESC']],
+      raw: true
+    });
+
+    reply.send(groupedErrors);
+  } catch (err) {
+    reply.status(500).send({ error: 'Erreur lors de la récupération des erreurs groupées' });
+  }
+});
+fastify.get('/logs/stats', async (request, reply) => {
+  try {
+    const topErrors = await Log.findAll({
+      attributes: [
+        'message',
+        [Sequelize.fn('COUNT', Sequelize.col('message')), 'count']
+      ],
+      group: ['message'],
+      order: [[Sequelize.fn('COUNT', Sequelize.col('message')), 'DESC']],
+      limit: 5,
+      raw: true
+    });
+
+    // Exemple de données d'évolution sur 24h
+    const errorEvolution = await Log.findAll({
+      attributes: [
+        [Sequelize.fn('DATE', Sequelize.col('timestamp')), 'date'],
+        [Sequelize.fn('COUNT', Sequelize.col('id')), 'count']
+      ],
+      where: {
+        timestamp: {
+          [Sequelize.Op.gt]: new Date(Date.now() - 24 * 60 * 60 * 1000)  // Dernières 24 heures
+        }
+      },
+      group: ['date'],
+      raw: true
+    });
+
+    reply.send({ topErrors, errorEvolution });
+  } catch (err) {
+    reply.status(500).send({ error: 'Erreur lors de la récupération des statistiques' });
+  }
+});
 
 // Endpoint pour recevoir les logs
 fastify.post('/logs', async (request, reply) => {
