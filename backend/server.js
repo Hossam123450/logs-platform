@@ -1,31 +1,26 @@
 import Fastify from 'fastify';
 import dotenv from 'dotenv';
 import sequelize from './config/db.js';
-import Log from './models/Logs.js';
+import Log from './models/Log.js';
 import Logger from './utils/logger.js';
 import formbody from '@fastify/formbody';
+import { getLogs } from './routes/logs.js';
+import { getAlerts } from './routes/alerts.js';
+import cors from '@fastify/cors';
 
+// Charger les variables d'environnement
 dotenv.config();
 
+// Créer l'instance Fastify
 const fastify = Fastify({ logger: true });
 
-// Catch exceptions non gérées
-process.on('uncaughtException', (err) => {
-  Logger.fatal('Exception non gérée', { meta: { stack: err.stack } });
-});
-
-// Catch promesses rejetées non gérées
-process.on('unhandledRejection', (reason) => {
-  Logger.fatal('Promesse rejetée non gérée', { meta: { reason } });
-});
-
-// Test connexion DB
-sequelize.authenticate()
-  .then(() => console.log('Connexion MySQL OK'))
-  .catch(err => console.error('Erreur MySQL :', err));
-
-// Parse JSON et form body
+// Enregistrer les plugins après l'initialisation
+fastify.register(cors, { origin: '*' });
 fastify.register(formbody);
+
+// Routes
+fastify.get('/alerts', getAlerts);
+fastify.get('/logs', getLogs);
 
 // Endpoint pour recevoir les logs
 fastify.post('/logs', async (request, reply) => {
@@ -56,6 +51,26 @@ fastify.post('/logs', async (request, reply) => {
     return reply.code(500).send({ error: 'Erreur serveur' });
   }
 });
+
+// Synchroniser la base de données
+sequelize.sync({ alter: true }) // alter:true met à jour les tables sans les supprimer
+  .then(() => console.log('✅ Tables synchronisées'))
+  .catch(err => console.error('❌ Erreur synchronisation tables', err));
+
+// Catch exceptions non gérées
+process.on('uncaughtException', (err) => {
+  Logger.fatal('Exception non gérée', { meta: { stack: err.stack } });
+});
+
+// Catch promesses rejetées non gérées
+process.on('unhandledRejection', (reason) => {
+  Logger.fatal('Promesse rejetée non gérée', { meta: { reason } });
+});
+
+// Test connexion DB
+sequelize.authenticate()
+  .then(() => console.log('Connexion MySQL OK'))
+  .catch(err => console.error('Erreur MySQL :', err));
 
 // Lancement du serveur
 const start = async () => {

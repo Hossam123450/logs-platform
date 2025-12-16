@@ -1,5 +1,5 @@
+// ./utils/logger.js
 import axios from 'axios'
-import { v4 as uuidv4 } from 'uuid'
 
 const API_LOG_URL = process.env.LOG_API_URL || 'http://localhost:3000/logs'
 
@@ -8,40 +8,31 @@ class Logger {
     this.env = env || process.env.NODE_ENV || 'development'
   }
 
-  async log({ level, message, requestId, sessionId, userId, route, method, statusCode, event, service, durationMs, meta }) {
+  async log(payload) {
+    // Ajout de timestamp et env si absent
+    const logEntry = {
+      timestamp: new Date().toISOString(),
+      env: this.env,
+      ...payload
+    }
+
+    // Log dans la console
+    console.log(`[${logEntry.level.toUpperCase()}] ${logEntry.timestamp}: ${logEntry.message}`)
+
+    // Envoi vers l'API /logs
     try {
-      const payload = {
-        timestamp: new Date(),
-        level,
-        message,
-        env: this.env,
-        requestId: requestId || uuidv4(),
-        sessionId: sessionId || uuidv4(),
-        userId: userId || null,
-        route,
-        method,
-        statusCode,
-        event,
-        service,
-        durationMs,
-        meta
-      }
-
-      // Envoi asynchrone
-      axios.post(API_LOG_URL, payload)
-        .then(() => console.log(`[LOG ${level}] envoyé`))
-        .catch(err => console.error('Erreur envoi log:', err.message))
-
+      await axios.post(API_LOG_URL, logEntry)
     } catch (err) {
-      console.error('Erreur logger:', err)
+      console.error('Erreur envoi log API:', err.message)
     }
   }
 
-  debug(msg, context) { this.log({ ...context, level: 'debug', message: msg }) }
-  info(msg, context) { this.log({ ...context, level: 'info', message: msg }) }
-  warn(msg, context) { this.log({ ...context, level: 'warn', message: msg }) }
-  error(msg, context) { this.log({ ...context, level: 'error', message: msg }) }
-  fatal(msg, context) { this.log({ ...context, level: 'fatal', message: msg }) }
+  debug(message, context = {}) { this.log({ ...context, level: 'debug', message }) }
+  info(message, context = {})  { this.log({ ...context, level: 'info', message }) }
+  warn(message, context = {})  { this.log({ ...context, level: 'warn', message }) }
+  error(message, context = {}) { this.log({ ...context, level: 'error', message }) }
+  fatal(message, context = {}) { this.log({ ...context, level: 'fatal', message }) }
 }
 
+// Export d’une instance unique
 export default new Logger()

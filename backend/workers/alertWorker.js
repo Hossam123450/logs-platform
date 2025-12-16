@@ -2,33 +2,44 @@ import Log from '../models/Log.js'
 import Alert from '../models/Alert.js'
 import crypto from 'crypto'
 import nodemailer from 'nodemailer'
+import { Op } from 'sequelize'
 
 // Configuration email (exemple SMTP)
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: process.env.SMTP_PORT,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS
-  }
-})
+  host: process.env.SMTP_HOST || 'localhost',
+  port: process.env.SMTP_PORT || 1025,
+  secure: false, // MailHog ne nécessite pas TLS
+  auth: null     // Pas d'auth pour MailHog
+});
+
 
 // Fonction pour générer une signature unique pour chaque erreur
 function getFingerprint(log) {
-  const str = `${log.level}|${log.message}|${log.route}|${log.service}`
-  return crypto.createHash('md5').update(str).digest('hex')
+  const route = log.route || 'unknown_route';
+  const service = log.service || 'unknown_service';
+  const str = `${log.level}|${log.message}|${route}|${service}`;
+  return crypto.createHash('md5').update(str).digest('hex');
 }
+
+
+// On garde en mémoire le dernier ID analysé
+let lastAnalyzedId = 0
 
 // Fonction d’analyse
 export async function analyzeLogs() {
   try {
     const logs = await Log.findAll({
-      where: { level: ['error', 'fatal'] },
-      order: [['timestamp', 'DESC']],
-      limit: 1000 // dernière batch
+      where: {
+        id: { [Op.gt]: lastAnalyzedId },
+        level: ['error', 'fatal']
+      },
+      order: [['id', 'ASC']],
+      limit: 1000
     })
 
     for (const log of logs) {
+      lastAnalyzedId = log.id // Mettre à jour le dernier ID analysé
+
       const fingerprint = getFingerprint(log)
       let alert = await Alert.findOne({ where: { logFingerprint: fingerprint } })
 
@@ -56,6 +67,7 @@ export async function analyzeLogs() {
         await alert.save()
       }
     }
+
   } catch (err) {
     console.error('Erreur analyse logs:', err)
   }
@@ -75,6 +87,6 @@ async function sendAlertEmail(alert) {
     console.error('Erreur envoi email:', err)
   }
 }
-
+analyzeLogs();
 // Lancer l’analyse toutes les 5 minutes
 setInterval(analyzeLogs, 5 * 60 * 1000)
