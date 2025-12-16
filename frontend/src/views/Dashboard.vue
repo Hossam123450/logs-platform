@@ -3,21 +3,24 @@
     <h1>Dashboard des Logs</h1>
     <LogFilters @filter-changed="applyFilters" />
     <LogTable :logs="filteredLogs" />
+    <button @click="sendTestLog">Envoyer log test</button>
   </div>
 </template>
 
 <script>
-import { ref } from 'vue';
+import { ref, inject } from 'vue';
 import axios from 'axios';
 import LogFilters from '../components/LogFilters.vue';
 import LogTable from '../components/LogTable.vue';
-
 
 export default {
   components: { LogFilters, LogTable },
   setup() {
     const logs = ref([]);
     const filteredLogs = ref([]);
+
+    // Injection correcte du logger
+    const logger = inject('logger');
 
     const fetchLogs = async () => {
       try {
@@ -45,9 +48,18 @@ export default {
       });
     };
 
+    // Fonction pour envoyer un log test
+    const sendTestLog = () => {
+      if (logger) {
+        logger.error('Log test depuis frontend', { route: '/dashboard', meta: { test: true } });
+      } else {
+        console.warn('Logger non injecté !');
+      }
+    };
+
     fetchLogs();
 
-    return { filteredLogs, applyFilters };
+    return { filteredLogs, applyFilters, sendTestLog };
   }
 };
 </script>
