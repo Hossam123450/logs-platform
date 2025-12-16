@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "axios": "^1.13.2",
     "dotenv": "^17.2.3",
     "fastify": "^5.6.2",
     "mysql2": "^3.15.3",
@@ -10,12 +11,14 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "dev": "nodemon server.js",
+    "start": "node server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "devDependencies": {
     "nodemon": "^3.1.11"
   }

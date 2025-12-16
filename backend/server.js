@@ -1,7 +1,7 @@
 import Fastify from 'fastify'
 import dotenv from 'dotenv'
-import { sequelize } from './config/db.js'
-import Log from './models/Log.js'
+import sequelize from './config/db.js';
+import Log from './models/Logs.js'
 import Logger from './utils/logger.js'
 dotenv.config()
 
