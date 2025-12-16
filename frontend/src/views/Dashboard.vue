@@ -9,8 +9,9 @@
 <script>
 import { ref } from 'vue';
 import axios from 'axios';
-import LogFilters from './LogFilters.vue';
-import LogTable from './LogTable.vue';
+import LogFilters from '../components/LogFilters.vue';
+import LogTable from '../components/LogTable.vue';
+
 
 export default {
   components: { LogFilters, LogTable },

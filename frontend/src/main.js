@@ -1,5 +1,6 @@
 import { createApp } from 'vue'
 import App from './App.vue'
+import router from './router'           // <-- importer le router
 import Logger from './utils/logger.js'
 
 const logger = new Logger({
@@ -10,6 +11,10 @@ const logger = new Logger({
 
 const app = createApp(App)
 app.provide('logger', logger)
+
+// ⚠️ utiliser le router
+app.use(router)
+
 app.mount('#app')
 
 // Capturer erreurs globales
