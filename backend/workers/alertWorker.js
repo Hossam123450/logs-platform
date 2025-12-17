@@ -1,92 +1,142 @@
-import Log from '../models/Log.js'
-import Alert from '../models/Alert.js'
-import crypto from 'crypto'
-import nodemailer from 'nodemailer'
-import { Op } from 'sequelize'
+import crypto from 'crypto';
+import { Op } from 'sequelize';
+import nodemailer from 'nodemailer';
 
-// Configuration email (exemple SMTP)
+import Log from '../models/Log.js';
+import Alert from '../models/Alert.js';
+import Logger from '../utils/logger.js';
+import sequelize from '../config/db.js';
+
+// --------------------------------------------------
+// Email transporter
+// --------------------------------------------------
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'localhost',
-  port: process.env.SMTP_PORT || 1025,
-  secure: false, // MailHog ne nécessite pas TLS
-  auth: null     // Pas d'auth pour MailHog
+  host: process.env.SMTP_HOST,
+  port: process.env.SMTP_PORT,
+  secure: false,
 });
 
+// --------------------------------------------------
+// Utils
+// --------------------------------------------------
+const generateFingerprint = (log) => {
+  const base = [
+    log.level,
+    log.message,
+    log.route || '',
+    log.service || '',
+  ].join('|');
 
-// Fonction pour générer une signature unique pour chaque erreur
-function getFingerprint(log) {
-  const route = log.route || 'unknown_route';
-  const service = log.service || 'unknown_service';
-  const str = `${log.level}|${log.message}|${route}|${service}`;
-  return crypto.createHash('md5').update(str).digest('hex');
+  return crypto.createHash('sha256').update(base).digest('hex');
+};
+
+// --------------------------------------------------
+// Worker state (persistant)
+// --------------------------------------------------
+async function getLastProcessedId() {
+  const [result] = await sequelize.query(
+    'SELECT value FROM worker_state WHERE name = "alert_worker_last_id"'
+  );
+  return result?.[0]?.value ? Number(result[0].value) : 0;
 }
 
+async function setLastProcessedId(id) {
+  await sequelize.query(
+    `INSERT INTO worker_state (name, value)
+     VALUES ("alert_worker_last_id", ?)
+     ON DUPLICATE KEY UPDATE value = ?`,
+    { replacements: [id, id] }
+  );
+}
 
-// On garde en mémoire le dernier ID analysé
-let lastAnalyzedId = 0
+// --------------------------------------------------
+// Analyse principale
+// --------------------------------------------------
+export async function runAlertWorker() {
+  Logger.info('ALERT_WORKER_STARTED', { service: 'worker' });
 
-// Fonction d’analyse
-export async function analyzeLogs() {
-  try {
-    const logs = await Log.findAll({
-      where: {
-        id: { [Op.gt]: lastAnalyzedId },
-        level: ['error', 'fatal']
-      },
-      order: [['id', 'ASC']],
-      limit: 1000
-    })
+  const lastId = await getLastProcessedId();
 
-    for (const log of logs) {
-      lastAnalyzedId = log.id // Mettre à jour le dernier ID analysé
+  const logs = await Log.findAll({
+    where: {
+      id: { [Op.gt]: lastId },
+      level: { [Op.in]: ['error', 'fatal'] },
+    },
+    order: [['id', 'ASC']],
+    limit: 500,
+  });
 
-      const fingerprint = getFingerprint(log)
-      let alert = await Alert.findOne({ where: { logFingerprint: fingerprint } })
+  for (const log of logs) {
+    const fingerprint = log.fingerprint || generateFingerprint(log);
 
-      if (alert) {
-        // Mise à jour de l’alerte existante
-        alert.occurrences += 1
-        alert.lastOccurrence = log.timestamp
-        await alert.save()
-      } else {
-        // Création d’une nouvelle alerte
-        alert = await Alert.create({
-          logFingerprint: fingerprint,
-          message: log.message,
-          level: log.level,
-          occurrences: 1,
-          lastOccurrence: log.timestamp,
-          notified: false
-        })
-      }
-
-      // Déclenchement alerte email si seuil dépassé et pas encore notifié
-      if (!alert.notified && alert.occurrences >= 5) {
-        await sendAlertEmail(alert)
-        alert.notified = true
-        await alert.save()
-      }
+    // Sauvegarde du fingerprint si absent
+    if (!log.fingerprint) {
+      log.fingerprint = fingerprint;
+      await log.save();
     }
 
-  } catch (err) {
-    console.error('Erreur analyse logs:', err)
+    let alert = await Alert.findOne({ where: { fingerprint } });
+
+    if (!alert) {
+      alert = await Alert.create({
+        fingerprint,
+        message: log.message,
+        level: log.level,
+        occurrences: 1,
+        firstOccurrence: log.timestamp,
+        lastOccurrence: log.timestamp,
+        notified: false,
+      });
+    } else {
+      alert.occurrences += 1;
+      alert.lastOccurrence = log.timestamp;
+      await alert.save();
+    }
+
+    // Exemple règle simple (sera configurable)
+    if (!alert.notified && alert.occurrences >= 5) {
+      await sendAlert(alert);
+      alert.notified = true;
+      await alert.save();
+    }
+
+    await setLastProcessedId(log.id);
   }
+
+  Logger.info('ALERT_WORKER_FINISHED', {
+    service: 'worker',
+    meta: { processed: logs.length },
+  });
 }
 
-// Fonction d’envoi d’email
-async function sendAlertEmail(alert) {
+// --------------------------------------------------
+// Email
+// --------------------------------------------------
+async function sendAlert(alert) {
   try {
     await transporter.sendMail({
-      from: '"Alert System" <alerts@example.com>',
-      to: 'admin@example.com',
-      subject: `[ALERTE] ${alert.level} détectée`,
-      text: `Une erreur récurrente a été détectée:\n\nMessage: ${alert.message}\nOccurrences: ${alert.occurrences}\nDernière occurrence: ${alert.lastOccurrence}`
-    })
-    console.log('Email d’alerte envoyé')
+      from: process.env.ALERT_FROM,
+      to: process.env.ALERT_RECIPIENTS,
+      subject: `[ALERTE] ${alert.level.toUpperCase()}`,
+      text: `
+Erreur détectée :
+
+Message : ${alert.message}
+Occurrences : ${alert.occurrences}
+Dernière occurrence : ${alert.lastOccurrence}
+Fingerprint : ${alert.fingerprint}
+      `,
+    });
+
+    Logger.info('ALERT_EMAIL_SENT', {
+      service: 'worker',
+      event: 'ALERT_SENT',
+      meta: { fingerprint: alert.fingerprint },
+    });
   } catch (err) {
-    console.error('Erreur envoi email:', err)
+    Logger.error('ALERT_EMAIL_FAILED', {
+      service: 'worker',
+      meta: { error: err.message },
+    });
   }
 }
-analyzeLogs();
-// Lancer l’analyse toutes les 5 minutes
-setInterval(analyzeLogs, 5 * 60 * 1000)

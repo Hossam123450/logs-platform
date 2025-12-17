@@ -1,136 +1,134 @@
 import Fastify from 'fastify';
 import dotenv from 'dotenv';
-import sequelize from './config/db.js';
-import Log from './models/Log.js';
-import Logger from './utils/logger.js';
-import formbody from '@fastify/formbody';
-import { getLogs } from './routes/logs.js';
-import { getAlerts } from './routes/alerts.js';
 import cors from '@fastify/cors';
+import formbody from '@fastify/formbody';
+import { randomUUID } from 'crypto';
 
-// Charger les variables d'environnement
-dotenv.config();
-
-// Créer l'instance Fastify
-const fastify = Fastify({ logger: true });
-
-// Enregistrer les plugins après l'initialisation
-fastify.register(cors, { origin: '*' });
-fastify.register(formbody);
+import sequelize from './config/db.js';
+import Logger from './utils/logger.js';
 
 // Routes
-fastify.get('/alerts', getAlerts);
-fastify.get('/logs', getLogs);
-// Backend : Route pour récupérer les erreurs groupées
-fastify.get('/logs/grouped-errors', async (request, reply) => {
-  try {
-    const groupedErrors = await Log.findAll({
-      attributes: [
-        'message',
-        [Sequelize.fn('COUNT', Sequelize.col('message')), 'count'],
-        [Sequelize.fn('MAX', Sequelize.col('timestamp')), 'lastOccurrence']
-      ],
-      group: ['message'],
-      order: [[Sequelize.fn('COUNT', Sequelize.col('message')), 'DESC']],
-      raw: true
-    });
+import logRoutes from './routes/logs.js';
+import alertRoutes from './routes/alerts.js';
+import userRoutes from './routes/users.js';
 
-    reply.send(groupedErrors);
-  } catch (err) {
-    reply.status(500).send({ error: 'Erreur lors de la récupération des erreurs groupées' });
-  }
-});
-fastify.get('/logs/stats', async (request, reply) => {
-  try {
-    const topErrors = await Log.findAll({
-      attributes: [
-        'message',
-        [Sequelize.fn('COUNT', Sequelize.col('message')), 'count']
-      ],
-      group: ['message'],
-      order: [[Sequelize.fn('COUNT', Sequelize.col('message')), 'DESC']],
-      limit: 5,
-      raw: true
-    });
+dotenv.config();
 
-    // Exemple de données d'évolution sur 24h
-    const errorEvolution = await Log.findAll({
-      attributes: [
-        [Sequelize.fn('DATE', Sequelize.col('timestamp')), 'date'],
-        [Sequelize.fn('COUNT', Sequelize.col('id')), 'count']
-      ],
-      where: {
-        timestamp: {
-          [Sequelize.Op.gt]: new Date(Date.now() - 24 * 60 * 60 * 1000)  // Dernières 24 heures
-        }
-      },
-      group: ['date'],
-      raw: true
-    });
+// --------------------------------------------------
+// Fastify instance (logger interne désactivé)
+// --------------------------------------------------
+const fastify = Fastify({ logger: false });
 
-    reply.send({ topErrors, errorEvolution });
-  } catch (err) {
-    reply.status(500).send({ error: 'Erreur lors de la récupération des statistiques' });
-  }
+// --------------------------------------------------
+// Plugins
+// --------------------------------------------------
+fastify.register(cors, { origin: true });
+fastify.register(formbody);
+
+// --------------------------------------------------
+// Hook global : requestId + timing
+// --------------------------------------------------
+fastify.addHook('onRequest', async (request) => {
+  request.requestId = randomUUID();
+  request.startTime = Date.now();
 });
 
-// Endpoint pour recevoir les logs
-fastify.post('/logs', async (request, reply) => {
-  try {
-    const logData = request.body;
+// --------------------------------------------------
+// Hook post-response : log technique API
+// --------------------------------------------------
+fastify.addHook('onResponse', async (request, reply) => {
+  if (request.routerPath.startsWith('/ingest')) return; // <-- Ignorer les logs eux-mêmes
 
-    // Validation minimale
-    const requiredFields = ['timestamp', 'level', 'message', 'env'];
-    for (const field of requiredFields) {
-      if (!logData[field]) {
-        return reply.code(400).send({ error: `${field} est obligatoire` });
-      }
-    }
+  const durationMs = Date.now() - request.startTime;
 
-    // Insertion asynchrone
-    try {
-      await Log.create(logData);
-      fastify.log.info('Log inséré');
-    } catch (err) {
-      fastify.log.error('Erreur insertion log:', err);
-    }
-
-    // Réponse rapide
-    return reply.code(202).send({ status: 'Accepted' });
-
-  } catch (err) {
-    fastify.log.error(err);
-    return reply.code(500).send({ error: 'Erreur serveur' });
-  }
+  Logger.info('HTTP_REQUEST', {
+    requestId: request.requestId,
+    route: request.routerPath,
+    method: request.method,
+    statusCode: reply.statusCode,
+    durationMs,
+    service: 'api',
+  });
 });
 
-// Synchroniser la base de données
-sequelize.sync({ alter: true }) // alter:true met à jour les tables sans les supprimer
-  .then(() => console.log('✅ Tables synchronisées'))
-  .catch(err => console.error('❌ Erreur synchronisation tables', err));
 
-// Catch exceptions non gérées
+// --------------------------------------------------
+// Error handler global
+// --------------------------------------------------
+fastify.setErrorHandler((error, request, reply) => {
+  Logger.error(error.message, {
+    requestId: request.requestId,
+    route: request.routerPath,
+    method: request.method,
+    meta: {
+      stack: error.stack,
+    },
+  });
+
+  reply.status(500).send({ error: 'Internal Server Error' });
+});
+
+// --------------------------------------------------
+// Routes
+// --------------------------------------------------
+
+// API d’ingestion (responsabilité unique)
+fastify.register(logRoutes, { prefix: '/ingest' });
+
+// API dashboard (lecture / stats)
+fastify.register(alertRoutes, { prefix: '/api/alerts' });
+fastify.register(userRoutes, { prefix: '/api/users' });
+
+// --------------------------------------------------
+// Process-level error handling (Node.js)
+// --------------------------------------------------
 process.on('uncaughtException', (err) => {
-  Logger.fatal('Exception non gérée', { meta: { stack: err.stack } });
+  Logger.fatal('UNCAUGHT_EXCEPTION', {
+    meta: { stack: err.stack },
+  });
 });
 
-// Catch promesses rejetées non gérées
 process.on('unhandledRejection', (reason) => {
-  Logger.fatal('Promesse rejetée non gérée', { meta: { reason } });
+  Logger.fatal('UNHANDLED_REJECTION', {
+    meta: { reason },
+  });
 });
 
-// Test connexion DB
-sequelize.authenticate()
-  .then(() => console.log('Connexion MySQL OK'))
-  .catch(err => console.error('Erreur MySQL :', err));
+// --------------------------------------------------
+// DB connection
+// --------------------------------------------------
+const initDatabase = async () => {
+  try {
+    await sequelize.authenticate();
+    Logger.info('DATABASE_CONNECTED', { service: 'mysql' });
+  } catch (err) {
+    Logger.fatal('DATABASE_CONNECTION_FAILED', {
+      meta: { error: err.message },
+    });
+    process.exit(1);
+  }
+};
 
-// Lancement du serveur
+// --------------------------------------------------
+// Server start
+// --------------------------------------------------
 const start = async () => {
   try {
-    await fastify.listen({ port: process.env.PORT || 3000 });
-    console.log(`Server running on port ${process.env.PORT || 3000}`);
+    await initDatabase();
+
+    await fastify.listen({
+      port: process.env.PORT || 3000,
+      host: '0.0.0.0',
+    });
+
+    Logger.info('SERVER_STARTED', {
+      service: 'api',
+      meta: { port: process.env.PORT || 3000 },
+    });
   } catch (err) {
-    fastify.log.error(err);
+    Logger.fatal('SERVER_START_FAILED', {
+      meta: { error: err.message },
+    });
     process.exit(1);
   }
 };
