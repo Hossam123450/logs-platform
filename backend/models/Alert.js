@@ -1,3 +1,4 @@
+// backend/models/Alert.js
 import { DataTypes } from 'sequelize';
 import sequelize from '../config/db.js';
 
@@ -11,74 +12,84 @@ const Alert = sequelize.define(
     },
 
     /**
-     * Fingerprint unique pour regrouper les erreurs similaires
+     * Nom lisible de la règle
      */
-    fingerprint: {
+    name: {
       type: DataTypes.STRING(128),
       allowNull: false,
     },
 
     /**
-     * Message principal
-     */
-    message: {
-      type: DataTypes.TEXT,
-      allowNull: false,
-    },
-
-    /**
-     * Niveau de gravité
+     * Niveau concerné par l’alerte
      */
     level: {
-      type: DataTypes.ENUM('debug', 'info', 'warn', 'error', 'fatal'),
+      type: DataTypes.ENUM('warn', 'error', 'fatal'),
       allowNull: false,
     },
 
     /**
-     * Nombre d’occurrences
+     * Fingerprint ciblé (null = toutes erreurs)
      */
-    occurrences: {
+    fingerprint: {
+      type: DataTypes.STRING(128),
+      allowNull: true,
+    },
+
+    /**
+     * Nombre d’occurrences pour déclencher l’alerte
+     */
+    threshold: {
       type: DataTypes.INTEGER,
-      defaultValue: 1,
-    },
-
-    /**
-     * Date de la première occurrence
-     */
-    firstOccurrence: {
-      type: DataTypes.DATE,
       allowNull: false,
+      defaultValue: 10,
     },
 
     /**
-     * Date de la dernière occurrence
+     * Fenêtre temporelle (en minutes)
      */
-    lastOccurrence: {
-      type: DataTypes.DATE,
+    timeWindowMinutes: {
+      type: DataTypes.INTEGER,
       allowNull: false,
+      defaultValue: 5,
     },
 
     /**
-     * Indique si une alerte a été envoyée
-     */
-    notified: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false,
-    },
-
-    /**
-     * Contexte utile pour filtrage
+     * Environnement ciblé
      */
     env: {
       type: DataTypes.STRING(32),
       allowNull: true,
     },
+
+    /**
+     * Service ciblé
+     */
     service: {
       type: DataTypes.STRING(64),
       allowNull: true,
     },
-    type: {
-      type: DataTypes.ENUM('system', 'auth', 'business', 'api', 'frontend'),
+
+    /**
+     * Destinataires email
+     */
+    emails: {
+      type: DataTypes.JSON,
+      allowNull: false,
+    },
+
+    /**
+     * Activation / désactivation
+     */
+    enabled: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+    },
+
+    /**
+     * Dernière fois où l’alerte a été déclenchée
+     */
+    lastTriggeredAt: {
+      type: DataTypes.DATE,
       allowNull: true,
     },
   },
@@ -86,10 +97,11 @@ const Alert = sequelize.define(
     tableName: 'alerts',
     timestamps: true,
     indexes: [
-      { fields: ['fingerprint'] },
       { fields: ['level'] },
+      { fields: ['fingerprint'] },
       { fields: ['env'] },
       { fields: ['service'] },
+      { fields: ['enabled'] },
     ],
   }
 );

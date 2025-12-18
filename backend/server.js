@@ -1,136 +1,78 @@
+// backend/server.js
 import Fastify from 'fastify';
-import dotenv from 'dotenv';
 import cors from '@fastify/cors';
-import formbody from '@fastify/formbody';
-import { randomUUID } from 'crypto';
-
+import helmet from '@fastify/helmet';
+import swagger from '@fastify/swagger';
+import swaggerUi from '@fastify/swagger-ui';
+import config from './config/index.js';
 import sequelize from './config/db.js';
-import Logger from './utils/logger.js';
+import { requestContextMiddleware } from './instrumentation/requestContext.js';
+import { errorHandler } from './middleware/errorHandler.js';
+import { authenticate } from './middleware/auth.js';
+import logger from './instrumentation/backendLogger.js';
 
 // Routes
+import ingestionRoutes from './routes/ingestion.js';
 import logRoutes from './routes/logs.js';
 import alertRoutes from './routes/alerts.js';
 import userRoutes from './routes/users.js';
 
-dotenv.config();
+// Workers
+import { processLogsWithoutFingerprint } from './workers/fingerprintWorker.js';
+import { groupSimilarErrors } from './workers/errorGroupWorker.js';
+import { processAlerts } from './workers/alertWorker.js';
 
-// --------------------------------------------------
-// Fastify instance (logger interne désactivé)
-// --------------------------------------------------
-const fastify = Fastify({ logger: false });
-
-// --------------------------------------------------
-// Plugins
-// --------------------------------------------------
-fastify.register(cors, { origin: true });
-fastify.register(formbody);
-
-// --------------------------------------------------
-// Hook global : requestId + timing
-// --------------------------------------------------
-fastify.addHook('onRequest', async (request) => {
-  request.requestId = randomUUID();
-  request.startTime = Date.now();
+// Initialisation Fastify
+const app = Fastify({
+  logger: false, // On utilise notre logger centralisé
 });
 
-// --------------------------------------------------
-// Hook post-response : log technique API
-// --------------------------------------------------
-fastify.addHook('onResponse', async (request, reply) => {
-  if (request.routerPath.startsWith('/ingest')) return; // <-- Ignorer les logs eux-mêmes
+// Sécurité & CORS
+await app.register(cors, { origin: true });
+await app.register(helmet);
 
-  const durationMs = Date.now() - request.startTime;
-
-  Logger.info('HTTP_REQUEST', {
-    requestId: request.requestId,
-    route: request.routerPath,
-    method: request.method,
-    statusCode: reply.statusCode,
-    durationMs,
-    service: 'api',
-  });
+// Documentation Swagger/OpenAPI
+await app.register(swagger, { 
+  swagger: { info: { title: 'Log Platform API', version: config.app.version } } 
 });
+await app.register(swaggerUi, { routePrefix: '/docs' });
 
+// Middleware global : contexte et erreur
+app.addHook('preHandler', requestContextMiddleware);
+app.setErrorHandler(errorHandler);
 
-// --------------------------------------------------
-// Error handler global
-// --------------------------------------------------
-fastify.setErrorHandler((error, request, reply) => {
-  Logger.error(error.message, {
-    requestId: request.requestId,
-    route: request.routerPath,
-    method: request.method,
-    meta: {
-      stack: error.stack,
-    },
-  });
+// Routes publiques
+app.register(ingestionRoutes, { prefix: '/ingestion' });
 
-  reply.status(500).send({ error: 'Internal Server Error' });
-});
+// Routes sécurisées
+app.register(logRoutes, { prefix: '/logs', preHandler: authenticate(['admin', 'analyst', 'viewer']) });
+app.register(alertRoutes, { prefix: '/alerts', preHandler: authenticate(['admin', 'analyst']) });
+app.register(userRoutes, { prefix: '/users', preHandler: authenticate(['admin']) });
 
-// --------------------------------------------------
-// Routes
-// --------------------------------------------------
-
-// API d’ingestion (responsabilité unique)
-fastify.register(logRoutes, { prefix: '/ingest' });
-
-// API dashboard (lecture / stats)
-fastify.register(alertRoutes, { prefix: '/api/alerts' });
-fastify.register(userRoutes, { prefix: '/api/users' });
-
-// --------------------------------------------------
-// Process-level error handling (Node.js)
-// --------------------------------------------------
-process.on('uncaughtException', (err) => {
-  Logger.fatal('UNCAUGHT_EXCEPTION', {
-    meta: { stack: err.stack },
-  });
-});
-
-process.on('unhandledRejection', (reason) => {
-  Logger.fatal('UNHANDLED_REJECTION', {
-    meta: { reason },
-  });
-});
-
-// --------------------------------------------------
-// DB connection
-// --------------------------------------------------
-const initDatabase = async () => {
+// Start server
+const startServer = async () => {
   try {
+    // Test DB connection
     await sequelize.authenticate();
-    Logger.info('DATABASE_CONNECTED', { service: 'mysql' });
+    logger.info('Connexion à la base de données réussie');
+
+    // Synchronisation (migration minimale)
+    await sequelize.sync(); // ou utiliser migrations Sequelize CLI
+    logger.info('Modèles synchronisés');
+
+    // Démarrage Fastify
+    await app.listen({ port: config.server.port, host: '0.0.0.0' });
+    logger.info(`Serveur démarré sur le port ${config.server.port}`);
+
+    // Lancer les workers en intervalle
+    setInterval(processLogsWithoutFingerprint, 5 * 60 * 1000);
+    setInterval(groupSimilarErrors, 5 * 60 * 1000);
+    setInterval(processAlerts, 1 * 60 * 1000);
+
   } catch (err) {
-    Logger.fatal('DATABASE_CONNECTION_FAILED', {
-      meta: { error: err.message },
-    });
+    logger.fatal('Erreur au démarrage du serveur', { error: err.message, stack: err.stack });
     process.exit(1);
   }
 };
 
-// --------------------------------------------------
-// Server start
-// --------------------------------------------------
-const start = async () => {
-  try {
-    await initDatabase();
-
-    await fastify.listen({
-      port: process.env.PORT || 3000,
-      host: '0.0.0.0',
-    });
-
-    Logger.info('SERVER_STARTED', {
-      service: 'api',
-      meta: { port: process.env.PORT || 3000 },
-    });
-  } catch (err) {
-    Logger.fatal('SERVER_START_FAILED', {
-      meta: { error: err.message },
-    });
-    process.exit(1);
-  }
-};
-
-start();
+startServer();

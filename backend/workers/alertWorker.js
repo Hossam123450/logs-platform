@@ -1,142 +1,43 @@
-import crypto from 'crypto';
-import { Op } from 'sequelize';
-import nodemailer from 'nodemailer';
-
+// backend/workers/alertWorker.js
 import Log from '../models/Log.js';
 import Alert from '../models/Alert.js';
-import Logger from '../utils/logger.js';
-import sequelize from '../config/db.js';
+import { sendEmail } from '../services/alertService.js';
+import { debug, error } from '../instrumentation/backendLogger.js';
+import { Op } from 'sequelize';
 
-// --------------------------------------------------
-// Email transporter
-// --------------------------------------------------
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: process.env.SMTP_PORT,
-  secure: false,
-});
-
-// --------------------------------------------------
-// Utils
-// --------------------------------------------------
-const generateFingerprint = (log) => {
-  const base = [
-    log.level,
-    log.message,
-    log.route || '',
-    log.service || '',
-  ].join('|');
-
-  return crypto.createHash('sha256').update(base).digest('hex');
-};
-
-// --------------------------------------------------
-// Worker state (persistant)
-// --------------------------------------------------
-async function getLastProcessedId() {
-  const [result] = await sequelize.query(
-    'SELECT value FROM worker_state WHERE name = "alert_worker_last_id"'
-  );
-  return result?.[0]?.value ? Number(result[0].value) : 0;
-}
-
-async function setLastProcessedId(id) {
-  await sequelize.query(
-    `INSERT INTO worker_state (name, value)
-     VALUES ("alert_worker_last_id", ?)
-     ON DUPLICATE KEY UPDATE value = ?`,
-    { replacements: [id, id] }
-  );
-}
-
-// --------------------------------------------------
-// Analyse principale
-// --------------------------------------------------
-export async function runAlertWorker() {
-  Logger.info('ALERT_WORKER_STARTED', { service: 'worker' });
-
-  const lastId = await getLastProcessedId();
-
-  const logs = await Log.findAll({
-    where: {
-      id: { [Op.gt]: lastId },
-      level: { [Op.in]: ['error', 'fatal'] },
-    },
-    order: [['id', 'ASC']],
-    limit: 500,
-  });
-
-  for (const log of logs) {
-    const fingerprint = log.fingerprint || generateFingerprint(log);
-
-    // Sauvegarde du fingerprint si absent
-    if (!log.fingerprint) {
-      log.fingerprint = fingerprint;
-      await log.save();
-    }
-
-    let alert = await Alert.findOne({ where: { fingerprint } });
-
-    if (!alert) {
-      alert = await Alert.create({
-        fingerprint,
-        message: log.message,
-        level: log.level,
-        occurrences: 1,
-        firstOccurrence: log.timestamp,
-        lastOccurrence: log.timestamp,
-        notified: false,
-      });
-    } else {
-      alert.occurrences += 1;
-      alert.lastOccurrence = log.timestamp;
-      await alert.save();
-    }
-
-    // Exemple règle simple (sera configurable)
-    if (!alert.notified && alert.occurrences >= 5) {
-      await sendAlert(alert);
-      alert.notified = true;
-      await alert.save();
-    }
-
-    await setLastProcessedId(log.id);
-  }
-
-  Logger.info('ALERT_WORKER_FINISHED', {
-    service: 'worker',
-    meta: { processed: logs.length },
-  });
-}
-
-// --------------------------------------------------
-// Email
-// --------------------------------------------------
-async function sendAlert(alert) {
+/**
+ * Vérifie les règles d'alerte et envoie des emails
+ */
+export async function processAlerts() {
   try {
-    await transporter.sendMail({
-      from: process.env.ALERT_FROM,
-      to: process.env.ALERT_RECIPIENTS,
-      subject: `[ALERTE] ${alert.level.toUpperCase()}`,
-      text: `
-Erreur détectée :
+    const alerts = await Alert.findAll({ where: { enabled: true } });
 
-Message : ${alert.message}
-Occurrences : ${alert.occurrences}
-Dernière occurrence : ${alert.lastOccurrence}
-Fingerprint : ${alert.fingerprint}
-      `,
-    });
+    for (const alert of alerts) {
+      // Récupérer les logs récents selon la fenêtre temporelle
+      const since = new Date(Date.now() - alert.timeWindowMinutes * 60 * 1000);
 
-    Logger.info('ALERT_EMAIL_SENT', {
-      service: 'worker',
-      event: 'ALERT_SENT',
-      meta: { fingerprint: alert.fingerprint },
-    });
+      const where = {
+        timestamp: { [Op.gte]: since },
+        level: alert.level,
+      };
+
+      if (alert.fingerprint) where.fingerprint = alert.fingerprint;
+      if (alert.env) where.env = alert.env;
+      if (alert.service) where.service = alert.service;
+
+      const count = await Log.count({ where });
+
+      if (count >= alert.threshold) {
+        // Envoyer l'alerte
+        await sendEmail(alert.emails, `Alerte: ${alert.name}`, `Nombre d'erreurs: ${count}`);
+        debug('Alerte déclenchée', { alertId: alert.id, count });
+
+        // Mettre à jour la dernière fois déclenchée
+        alert.lastTriggeredAt = new Date();
+        await alert.save();
+      }
+    }
   } catch (err) {
-    Logger.error('ALERT_EMAIL_FAILED', {
-      service: 'worker',
-      meta: { error: err.message },
-    });
+    error('Erreur alertWorker', { error: err.message, stack: err.stack });
   }
 }

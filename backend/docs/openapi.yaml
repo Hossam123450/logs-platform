@@ -1,0 +1,101 @@
+openapi: 3.0.3
+info:
+  title: Log Platform API
+  version: 1.0.0
+  description: API de centralisation et d'analyse des logs
+
+servers:
+  - url: http://localhost:3000
+    description: Serveur local de développement
+
+tags:
+  - name: Ingestion
+    description: Envoi de logs depuis les applications
+  - name: Logs
+    description: Consultation et analyse des logs
+  - name: Alerts
+    description: Gestion et déclenchement des alertes
+  - name: Users
+    description: Gestion des utilisateurs et rôles
+
+paths:
+  /ingestion:
+    post:
+      tags:
+        - Ingestion
+      summary: Recevoir un log
+      description: Endpoint d’ingestion pour tous les logs applicatifs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogPayload'
+      responses:
+        '202':
+          description: Log reçu avec succès
+        '400':
+          description: Payload invalide
+
+  /logs:
+    get:
+      tags:
+        - Logs
+      summary: Liste des logs
+      parameters:
+        - name: level
+          in: query
+          schema:
+            type: string
+            enum: [debug, info, warn, error, fatal]
+        - name: env
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Liste des logs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Log'
+
+  /alerts:
+    get:
+      tags:
+        - Alerts
+      summary: Liste des alertes
+      responses:
+        '200':
+          description: Liste des alertes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Alert'
+
+  /users:
+    get:
+      tags:
+        - Users
+      summary: Liste des utilisateurs
+      responses:
+        '200':
+          description: Liste des utilisateurs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'

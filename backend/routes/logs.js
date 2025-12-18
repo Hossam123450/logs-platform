@@ -1,47 +1,47 @@
-import Log from '../models/Log.js';
-import Logger from '../utils/logger.js';
+// backend/routes/logs.js
+import LogService from '../services/logService.js';
+import { logSchema } from '../schemas/logSchema.js';
 
 export default async function logRoutes(fastify) {
-  // POST existant
-  fastify.post('/logs', {
-    schema: {
-      body: {
-        type: 'object',
-        required: ['timestamp', 'level', 'message', 'env'],
-        properties: {
-          timestamp: { type: 'string', format: 'date-time' },
-          level: { type: 'string', enum: ['debug','info','warn','error','fatal'] },
-          message: { type: 'string', minLength: 1 },
-          env: { type: 'string' },
-          requestId: { type: ['string','null'] },
-          sessionId: { type: ['string','null'] },
-          userId: { type: ['string','number','null'] },
-          route: { type: ['string','null'] },
-          method: { type: ['string','null'] },
-          statusCode: { type: ['number','null'] },
-          durationMs: { type: ['number','null'] },
-          event: { type: ['string','null'] },
-          service: { type: ['string','null'] },
-          meta: { type: ['object','null'], additionalProperties: true },
-        },
-        additionalProperties: true
-      }
-    },
-    handler: async (request, reply) => {
-      const logPayload = request.body;
-      Log.create(logPayload).catch(err => {
-        Logger.error('LOG_INSERT_FAILED', {
-          requestId: request.requestId,
-          meta: { error: err.message }
-        });
-      });
-      return reply.code(202).send();
+  // POST /logs → ingestion d'un log
+  fastify.post(
+    '/logs',
+    { schema: logSchema },
+    async (request, reply) => {
+      const log = await LogService.createLog(request.body);
+      return reply.code(201).send(log);
     }
+  );
+
+  // GET /logs → liste des logs avec filtres
+  fastify.get('/logs', async (request, reply) => {
+    const { level, env, service, fingerprint, userId, startDate, endDate, limit, offset } =
+      request.query;
+
+    const filters = { level, env, service, fingerprint, userId, startDate, endDate };
+    const options = {
+      limit: limit ? parseInt(limit) : 50,
+      offset: offset ? parseInt(offset) : 0,
+    };
+
+    const result = await LogService.getLogs(filters, options);
+    return {
+      total: result.count,
+      logs: result.rows,
+    };
   });
 
-  // --- GET temporaire pour tester ---
-  fastify.get('/logs', async (request, reply) => {
-    const logs = await Log.findAll({ order: [['timestamp', 'DESC']], limit: 50 });
-    return reply.send(logs);
+  // GET /logs/:id → un log spécifique
+  fastify.get('/logs/:id', async (request, reply) => {
+    const log = await LogService.getLogById(request.params.id);
+    if (!log) return reply.code(404).send({ message: 'Log not found' });
+    return log;
+  });
+
+  // DELETE /logs/:id → supprimer un log
+  fastify.delete('/logs/:id', async (request, reply) => {
+    const deleted = await LogService.deleteLog(request.params.id);
+    if (!deleted) return reply.code(404).send({ message: 'Log not found' });
+    return reply.code(204).send();
   });
 }

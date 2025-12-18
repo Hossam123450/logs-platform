@@ -1,33 +1,49 @@
 // backend/config/db.js
 import { Sequelize } from 'sequelize';
-import dotenv from 'dotenv';
+import config from './index.js';
 
-dotenv.config();
-
-// Créer l'instance Sequelize
 const sequelize = new Sequelize(
-  process.env.DB_NAME,     // Nom de la base
-  process.env.DB_USER,     // Utilisateur MySQL
-  process.env.DB_PASSWORD, // Mot de passe
+  config.database.name,
+  config.database.user,
+  config.database.password,
   {
-    host: process.env.DB_HOST || 'localhost',
-    port: process.env.DB_PORT || 3306,
+    host: config.database.host,
+    port: config.database.port,
     dialect: 'mysql',
-    logging: false,        // false pour ne pas afficher toutes les requêtes SQL
+
+    pool: {
+      max: 10,
+      min: 0,
+      acquire: 30000,
+      idle: 10000,
+    },
+
+    logging: config.database.logging,
+
+    timezone: '+00:00',
+
+    define: {
+      charset: 'utf8mb4',
+      collate: 'utf8mb4_unicode_ci',
+      timestamps: true,
+    },
+
+    dialectOptions: {
+      supportBigNumbers: true,
+      bigNumberStrings: true,
+    },
   }
 );
 
-// Fonction pour tester la connexion
-async function testConnection() {
+// Test de connexion explicite (fail fast)
+export async function initDatabase() {
   try {
     await sequelize.authenticate();
-    console.log('✅ Database connected.');
+    console.log('✅ Database connection established');
   } catch (error) {
-    console.error('❌ Unable to connect to the database:', error);
+    console.error('❌ Unable to connect to database:', error);
+    process.exit(1);
   }
 }
-
-// Lancer le test de connexion
-testConnection();
 
 export default sequelize;

@@ -1,47 +1,50 @@
-import Logger from '../utils/logger.js';
-import User from '../models/User.js';
-import { Op } from 'sequelize';
+// backend/routes/users.js
+import UserService from '../services/userService.js';
+import { userSchema } from '../schemas/userSchema.js';
 
 export default async function userRoutes(fastify) {
-  fastify.get('/', async (request, reply) => {
-    const requestId = request.headers['x-request-id'] || null;
-    const { role, search, limit = 50, offset = 0 } = request.query;
+  // GET /users → liste des utilisateurs
+  fastify.get('/users', async (request, reply) => {
+    const users = await UserService.getUsers();
+    return users;
+  });
 
-    const where = {};
-    if (role) where.role = role;
-    if (search) {
-      where[Op.or] = [
-        { username: { [Op.like]: `%${search}%` } },
-        { email: { [Op.like]: `%${search}%` } },
-      ];
+  // GET /users/:id → un utilisateur
+  fastify.get('/users/:id', async (request, reply) => {
+    const user = await UserService.getUserById(request.params.id);
+    if (!user) return reply.code(404).send({ message: 'User not found' });
+    return user;
+  });
+
+  // POST /users → créer un utilisateur
+  fastify.post(
+    '/users',
+    { schema: userSchema },
+    async (request, reply) => {
+      const user = await UserService.createUser(request.body);
+      return reply.code(201).send(user);
     }
+  );
 
-    try {
-      const users = await User.findAll({
-        where,
-        attributes: { exclude: ['passwordHash'] },
-        limit: parseInt(limit),
-        offset: parseInt(offset),
-        order: [['username', 'ASC']],
-      });
-
-      Logger.info('LIST_USERS', {
-        requestId,
-        route: request.url,
-        method: request.method,
-        count: users.length,
-      });
-
-      return reply.send(users);
-    } catch (err) {
-      Logger.error('ERROR_FETCH_USERS', {
-        requestId,
-        route: request.url,
-        method: request.method,
-        meta: { stack: err.stack },
-      });
-
-      return reply.code(500).send({ error: 'Erreur serveur' });
+  // PUT /users/:id → mettre à jour un utilisateur
+  fastify.put(
+    '/users/:id',
+    { schema: userSchema },
+    async (request, reply) => {
+      const updatedUser = await UserService.updateUser(
+        request.params.id,
+        request.body
+      );
+      if (!updatedUser)
+        return reply.code(404).send({ message: 'User not found' });
+      return updatedUser;
     }
+  );
+
+  // DELETE /users/:id → supprimer un utilisateur
+  fastify.delete('/users/:id', async (request, reply) => {
+    const deleted = await UserService.deleteUser(request.params.id);
+    if (!deleted) return reply.code(404).send({ message: 'User not found' });
+    return reply.code(204).send();
   });
 }

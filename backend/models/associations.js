@@ -1,20 +1,44 @@
+// backend/models/associations.js
 import User from './User.js';
 import Log from './Log.js';
 import Alert from './Alert.js';
+import Ingestion from './Ingestion.js';
 
-/**
- * Relations :
- * User -> Log : 1:N
- * Log -> Alert : 1:N via fingerprint
- */
+export default function setupAssociations() {
+  // -------------------------------
+  // User ↔ Log
+  // -------------------------------
+  User.hasMany(Log, {
+    foreignKey: 'userId',
+    as: 'logs',
+    onDelete: 'SET NULL',
+    onUpdate: 'CASCADE',
+  });
 
-// User <-> Log
-User.hasMany(Log, { foreignKey: 'userId', as: 'logs' });
-Log.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+  Log.belongsTo(User, {
+    foreignKey: 'userId',
+    as: 'user',
+  });
 
-// Log <-> Alert
-// On relie via fingerprint
-Log.hasMany(Alert, { foreignKey: 'fingerprint', sourceKey: 'fingerprint', as: 'alerts' });
-Alert.belongsTo(Log, { foreignKey: 'fingerprint', targetKey: 'fingerprint', as: 'log' });
+  // -------------------------------
+  // Log ↔ Ingestion
+  // -------------------------------
+  Log.hasMany(Ingestion, {
+    foreignKey: 'logId',
+    as: 'ingestions',
+    onDelete: 'CASCADE',
+    onUpdate: 'CASCADE',
+  });
 
-export { User, Log, Alert };
+  Ingestion.belongsTo(Log, {
+    foreignKey: 'logId',
+    as: 'log',
+  });
+
+  // -------------------------------
+  // Alerts
+  // -------------------------------
+  // Les Alerts sont liés aux logs via 'fingerprint'
+  // Pas de FK directe, la relation se fera via service/level/fingerprint
+  // pour l'analyse et le déclenchement automatique
+}

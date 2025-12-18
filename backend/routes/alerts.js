@@ -1,41 +1,52 @@
-import Alert from '../models/Alert.js';
-import Logger from '../utils/logger.js';
-import { Op } from 'sequelize';
+// backend/routes/alerts.js
+import AlertService from '../services/alertService.js';
+import { alertSchema } from '../schemas/alertSchema.js';
 
 export default async function alertRoutes(fastify) {
-  fastify.get('/', async (request, reply) => {
-    try {
-      const {
-        level,
-        env,
-        service,
-        type,
-        search,
-        limit = 50,
-        offset = 0,
-      } = request.query;
+  // GET /alerts → liste des alertes
+  fastify.get('/alerts', async (request, reply) => {
+    const filters = request.query || {};
+    const alerts = await AlertService.getAlerts(filters);
+    return alerts;
+  });
 
-      const where = {};
-      if (level) where.level = level;
-      if (env) where.env = env;
-      if (service) where.service = service;
-      if (type) where.type = type;
-      if (search) where.message = { [Op.like]: `%${search}%` };
+  // GET /alerts/:id → une alerte
+  fastify.get('/alerts/:id', async (request, reply) => {
+    const alert = await AlertService.getAlertById(request.params.id);
+    if (!alert) return reply.code(404).send({ message: 'Alert not found' });
+    return alert;
+  });
 
-      const alerts = await Alert.findAll({
-        where,
-        order: [['lastOccurrence', 'DESC']],
-        limit: parseInt(limit),
-        offset: parseInt(offset),
-      });
-
-      return reply.send(alerts);
-    } catch (err) {
-      Logger.error('ERROR_FETCH_ALERTS', {
-        requestId: request.requestId,
-        meta: { stack: err.stack },
-      });
-      return reply.code(500).send({ error: 'Erreur serveur' });
+  // POST /alerts → créer une alerte
+  fastify.post(
+    '/alerts',
+    { schema: alertSchema },
+    async (request, reply) => {
+      const alert = await AlertService.createAlert(request.body);
+      return reply.code(201).send(alert);
     }
+  );
+
+  // PUT /alerts/:id → mettre à jour une alerte
+  fastify.put(
+    '/alerts/:id',
+    { schema: alertSchema },
+    async (request, reply) => {
+      const updatedAlert = await AlertService.updateAlert(
+        request.params.id,
+        request.body
+      );
+      if (!updatedAlert)
+        return reply.code(404).send({ message: 'Alert not found' });
+      return updatedAlert;
+    }
+  );
+
+  // DELETE /alerts/:id → supprimer une alerte
+  fastify.delete('/alerts/:id', async (request, reply) => {
+    const deleted = await AlertService.deleteAlert(request.params.id);
+    if (!deleted)
+      return reply.code(404).send({ message: 'Alert not found' });
+    return reply.code(204).send();
   });
 }
