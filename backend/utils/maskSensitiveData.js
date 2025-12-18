@@ -2,12 +2,13 @@
 
 /**
  * Liste des champs sensibles à masquer automatiquement
+ * Toutes en minuscules pour éviter les problèmes de casse
  */
 const SENSITIVE_KEYS = [
   'password',
-  'passwordHash',
+  'passwordhash',
   'token',
-  'apiKey',
+  'apikey',
   'secret',
   'authorization',
 ];
@@ -20,7 +21,6 @@ const SENSITIVE_KEYS = [
 export function maskSensitiveData(data) {
   if (!data) return data;
 
-  // Copie profonde pour ne pas modifier l'objet original
   if (Array.isArray(data)) {
     return data.map(item => maskSensitiveData(item));
   } else if (typeof data === 'object') {
@@ -37,6 +37,5 @@ export function maskSensitiveData(data) {
     return masked;
   }
 
-  // Pour les types primitifs, rien à masquer
-  return data;
+  return data; // types primitifs
 }

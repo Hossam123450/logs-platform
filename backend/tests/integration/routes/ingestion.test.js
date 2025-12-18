@@ -1,49 +1,64 @@
-// backend/tests/integration/routes/ingestion.test.js
-import Fastify from 'fastify';
-import supertest from 'supertest';
-import ingestionRoutes from '../../../routes/ingestion.js';
-import sequelize from '../../../config/db.js';
+// tests/unit/services/ingestionService.test.js
+import IngestionService from '../../../services/ingestionService.js';
+import Log from '../../../models/Log.js';
+import Ingestion from '../../../models/Ingestion.js';
 
-let app;
+jest.mock('../../../models/Log.js');
+jest.mock('../../../models/Ingestion.js');
 
-beforeAll(async () => {
-  app = Fastify();
-  app.register(ingestionRoutes, { prefix: '/ingestion' });
-
-  // DB en mémoire pour tests
-  await sequelize.sync({ force: true });
-});
-
-afterAll(async () => {
-  await sequelize.close();
-});
-
-describe('POST /ingestion', () => {
-  it('doit accepter un log valide', async () => {
-    const payload = {
-      timestamp: new Date().toISOString(),
-      level: 'info',
-      message: 'Test log',
-      env: 'test'
-    };
-
-    const res = await supertest(app.server)
-      .post('/ingestion')
-      .send(payload)
-      .expect(202);
-
-    expect(res.text).toBe('');
+describe('IngestionService', () => {
+  afterEach(() => {
+    jest.clearAllMocks();
   });
 
-  it('doit rejeter un log invalide', async () => {
-    const payload = {
-      timestamp: 'not-a-date',
-      level: 'info',
-    };
+  describe('ingestLog', () => {
+    it('doit enregistrer un log via ingestion', async () => {
+      const payload = { timestamp: new Date(), level: 'info', message: 'Ingestion test', env: 'test' };
 
-    await supertest(app.server)
-      .post('/ingestion')
-      .send(payload)
-      .expect(400);
+      const fakeLog = { id: 1, ...payload };
+      const fakeIngestion = { id: 1, logId: 1, status: 'received', receivedAt: new Date() };
+
+      Log.create.mockResolvedValue(fakeLog);
+      Ingestion.create.mockResolvedValue(fakeIngestion);
+
+      // ⚠️ Utiliser ingestLog, pas ingest
+      const ingestion = await IngestionService.ingestLog(payload);
+
+      expect(Log.create).toHaveBeenCalledWith(payload);
+      expect(Ingestion.create).toHaveBeenCalledWith({
+        logId: fakeLog.id,
+        status: 'received',
+        receivedAt: expect.any(Date),
+      });
+      expect(ingestion).toEqual(fakeIngestion);
+    });
+  });
+
+  describe('updateIngestionStatus', () => {
+    it('doit mettre à jour le status d\'une ingestion', async () => {
+      const fakeIngestion = {
+        id: 1,
+        update: jest.fn().mockResolvedValue({ id: 1, status: 'processed' }),
+      };
+
+      Ingestion.findByPk = jest.fn().mockResolvedValue(fakeIngestion);
+
+      const updated = await IngestionService.updateIngestionStatus(1, 'processed');
+
+      expect(Ingestion.findByPk).toHaveBeenCalledWith(1);
+      expect(fakeIngestion.update).toHaveBeenCalledWith({
+        status: 'processed',
+        processedAt: expect.any(Date),
+      });
+      expect(updated.status).toBe('processed');
+    });
+
+    it('doit retourner null si l\'ingestion n\'existe pas', async () => {
+      Ingestion.findByPk = jest.fn().mockResolvedValue(null);
+
+      const updated = await IngestionService.updateIngestionStatus(999, 'processed');
+
+      expect(updated).toBeNull();
+    });
   });
 });

@@ -1,20 +1,37 @@
+// tests/unit/services/alertService.test.js
 import AlertService from '../../../services/alertService.js';
 import Alert from '../../../models/Alert.js';
-import sequelize from '../../../config/db.js';
 
-beforeAll(async () => await sequelize.sync({ force: true }));
-afterAll(async () => await sequelize.close());
+jest.mock('../../../models/Alert.js');
 
 describe('AlertService', () => {
-  it('doit créer une alerte', async () => {
-    const payload = { name: 'Test', level: 'warn', threshold: 1, timeWindowMinutes: 5, emails: ['test@test.com'] };
-    const alert = await AlertService.create(payload);
-    expect(alert.id).toBeDefined();
-    expect(alert.name).toBe('Test');
+  afterEach(() => {
+    jest.clearAllMocks();
   });
 
-  it('doit lister les alertes actives', async () => {
-    const alerts = await AlertService.findAll({ enabled: true });
-    expect(alerts.length).toBeGreaterThan(0);
+  it('doit créer une alerte', async () => {
+    const payload = { message: 'alerte test' };
+    const fakeAlert = { id: 1, ...payload };
+
+    Alert.create.mockResolvedValue(fakeAlert);
+
+    const alert = await AlertService.createAlert(payload);
+
+    expect(Alert.create).toHaveBeenCalledWith(payload);
+    expect(alert).toEqual(fakeAlert);
+  });
+
+  it('doit lister les alertes', async () => {
+    const fakeAlerts = [{ id: 1, message: 'alerte test' }];
+
+    Alert.findAll.mockResolvedValue(fakeAlerts);
+
+    const alerts = await AlertService.getAlerts({ enabled: true });
+
+    expect(Alert.findAll).toHaveBeenCalledWith({
+      where: { enabled: true },
+      order: [['createdAt', 'DESC']],
+    });
+    expect(alerts).toEqual(fakeAlerts);
   });
 });

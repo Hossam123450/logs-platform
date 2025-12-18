@@ -13,6 +13,7 @@
     "@fastify/cors": "^11.2.0",
     "@fastify/formbody": "^8.0.2",
     "axios": "^1.13.2",
+    "bcryptjs": "^3.0.3",
     "dotenv": "^17.2.3",
     "fastify": "^5.6.2",
     "mysql2": "^3.15.3",
