@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<coverage generated="1766058993719" clover="3.2.0">
-  <project timestamp="1766058993719" name="All files">
-    <metrics statements="79" coveredstatements="52" conditionals="71" coveredconditionals="42" methods="21" coveredmethods="11" elements="171" coveredelements="105" complexity="0" loc="79" ncloc="79" packages="4" files="11" classes="11"/>
+<coverage generated="1766073711522" clover="3.2.0">
+  <project timestamp="1766073711522" name="All files">
+    <metrics statements="98" coveredstatements="66" conditionals="82" coveredconditionals="45" methods="32" coveredmethods="15" elements="212" coveredelements="126" complexity="0" loc="98" ncloc="98" packages="6" files="14" classes="14"/>
     <package name="config">
       <metrics statements="11" coveredstatements="5" conditionals="20" coveredconditionals="12" methods="2" coveredmethods="1"/>
       <file name="db.js" path="C:\Users\poste\logs-platform\backend\config\db.js">
         <metrics statements="6" coveredstatements="1" conditionals="4" coveredconditionals="2" methods="1" coveredmethods="0"/>
-        <line num="5" count="6" type="stmt"/>
+        <line num="5" count="7" type="stmt"/>
         <line num="41" count="0" type="stmt"/>
         <line num="42" count="0" type="stmt"/>
         <line num="43" count="0" type="stmt"/>
@@ -15,11 +15,35 @@
       </file>
       <file name="index.js" path="C:\Users\poste\logs-platform\backend\config\index.js">
         <metrics statements="5" coveredstatements="4" conditionals="16" coveredconditionals="10" methods="1" coveredmethods="1"/>
-        <line num="4" count="6" type="stmt"/>
-        <line num="7" count="36" type="cond" truecount="1" falsecount="1"/>
+        <line num="4" count="8" type="stmt"/>
+        <line num="7" count="48" type="cond" truecount="1" falsecount="1"/>
         <line num="8" count="0" type="stmt"/>
-        <line num="10" count="36" type="stmt"/>
-        <line num="13" count="6" type="stmt"/>
+        <line num="10" count="48" type="stmt"/>
+        <line num="13" count="8" type="stmt"/>
+      </file>
+    </package>
+    <package name="instrumentation">
+      <metrics statements="15" coveredstatements="11" conditionals="11" coveredconditionals="3" methods="10" coveredmethods="3"/>
+      <file name="backendLogger.js" path="C:\Users\poste\logs-platform\backend\instrumentation\backendLogger.js">
+        <metrics statements="9" coveredstatements="9" conditionals="3" coveredconditionals="1" methods="6" coveredmethods="2"/>
+        <line num="8" count="1" type="stmt"/>
+        <line num="20" count="1" type="stmt"/>
+        <line num="23" count="1" type="stmt"/>
+        <line num="28" count="1" type="stmt"/>
+        <line num="34" count="1" type="stmt"/>
+        <line num="35" count="1" type="stmt"/>
+        <line num="36" count="1" type="stmt"/>
+        <line num="37" count="1" type="stmt"/>
+        <line num="38" count="1" type="stmt"/>
+      </file>
+      <file name="requestContext.js" path="C:\Users\poste\logs-platform\backend\instrumentation\requestContext.js">
+        <metrics statements="6" coveredstatements="2" conditionals="8" coveredconditionals="2" methods="4" coveredmethods="1"/>
+        <line num="4" count="1" type="stmt"/>
+        <line num="10" count="0" type="stmt"/>
+        <line num="16" count="0" type="stmt"/>
+        <line num="17" count="0" type="stmt"/>
+        <line num="26" count="1" type="cond" truecount="2" falsecount="0"/>
+        <line num="34" count="0" type="stmt"/>
       </file>
     </package>
     <package name="models">
@@ -34,7 +58,7 @@
       </file>
       <file name="Log.js" path="C:\Users\poste\logs-platform\backend\models\Log.js">
         <metrics statements="1" coveredstatements="1" conditionals="0" coveredconditionals="0" methods="0" coveredmethods="0"/>
-        <line num="4" count="2" type="stmt"/>
+        <line num="4" count="3" type="stmt"/>
       </file>
       <file name="User.js" path="C:\Users\poste\logs-platform\backend\models\User.js">
         <metrics statements="1" coveredstatements="1" conditionals="0" coveredconditionals="0" methods="0" coveredmethods="0"/>
@@ -110,20 +134,30 @@
       <metrics statements="14" coveredstatements="14" conditionals="10" coveredconditionals="10" methods="2" coveredmethods="2"/>
       <file name="maskSensitiveData.js" path="C:\Users\poste\logs-platform\backend\utils\maskSensitiveData.js">
         <metrics statements="14" coveredstatements="14" conditionals="10" coveredconditionals="10" methods="2" coveredmethods="2"/>
-        <line num="7" count="1" type="stmt"/>
-        <line num="22" count="9" type="cond" truecount="2" falsecount="0"/>
-        <line num="24" count="7" type="cond" truecount="2" falsecount="0"/>
+        <line num="7" count="2" type="stmt"/>
+        <line num="22" count="10" type="cond" truecount="2" falsecount="0"/>
+        <line num="24" count="8" type="cond" truecount="2" falsecount="0"/>
         <line num="25" count="2" type="stmt"/>
-        <line num="26" count="6" type="cond" truecount="2" falsecount="0"/>
-        <line num="27" count="4" type="stmt"/>
-        <line num="28" count="4" type="stmt"/>
-        <line num="29" count="9" type="cond" truecount="2" falsecount="0"/>
+        <line num="26" count="7" type="cond" truecount="2" falsecount="0"/>
+        <line num="27" count="5" type="stmt"/>
+        <line num="28" count="5" type="stmt"/>
+        <line num="29" count="10" type="cond" truecount="2" falsecount="0"/>
         <line num="30" count="5" type="stmt"/>
-        <line num="31" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="31" count="5" type="cond" truecount="2" falsecount="0"/>
         <line num="32" count="1" type="stmt"/>
-        <line num="34" count="3" type="stmt"/>
-        <line num="37" count="4" type="stmt"/>
+        <line num="34" count="4" type="stmt"/>
+        <line num="37" count="5" type="stmt"/>
         <line num="40" count="2" type="stmt"/>
+      </file>
+    </package>
+    <package name="workers">
+      <metrics statements="4" coveredstatements="3" conditionals="0" coveredconditionals="0" methods="1" coveredmethods="1"/>
+      <file name="errorGroupWorker.js" path="C:\Users\poste\logs-platform\backend\workers\errorGroupWorker.js">
+        <metrics statements="4" coveredstatements="3" conditionals="0" coveredconditionals="0" methods="1" coveredmethods="1"/>
+        <line num="9" count="1" type="stmt"/>
+        <line num="11" count="1" type="stmt"/>
+        <line num="18" count="1" type="stmt"/>
+        <line num="21" count="0" type="stmt"/>
       </file>
     </package>
   </project>
