@@ -9,7 +9,8 @@ const sequelize = new Sequelize(
   {
     host: config.database.host,
     port: config.database.port,
-    dialect: 'mysql',
+    dialect: process.env.NODE_ENV === 'test' ? 'sqlite' : 'mysql',
+    storage: process.env.NODE_ENV === 'test' ? ':memory:' : undefined,
 
     pool: {
       max: 10,

@@ -1,0 +1,124 @@
+components:
+  schemas:
+    LogPayload:
+      type: object
+      required:
+        - timestamp
+        - level
+        - message
+        - env
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        level:
+          type: string
+          enum: [debug, info, warn, error, fatal]
+        message:
+          type: string
+        env:
+          type: string
+        type:
+          type: string
+          enum: [system, auth, business, api, frontend]
+        source:
+          type: string
+          enum: [backend, frontend, worker]
+        app:
+          type: string
+        requestId:
+          type: string
+        sessionId:
+          type: string
+        userId:
+          type: string
+        route:
+          type: string
+        method:
+          type: string
+        statusCode:
+          type: integer
+        durationMs:
+          type: integer
+        event:
+          type: string
+        service:
+          type: string
+        fingerprint:
+          type: string
+        meta:
+          type: object
+
+    Log:
+      allOf:
+        - $ref: '#/components/schemas/LogPayload'
+        - type: object
+          properties:
+            id:
+              type: integer
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+
+    Alert:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        level:
+          type: string
+          enum: [warn, error, fatal]
+        fingerprint:
+          type: string
+        threshold:
+          type: integer
+        timeWindowMinutes:
+          type: integer
+        env:
+          type: string
+        service:
+          type: string
+        emails:
+          type: array
+          items:
+            type: string
+        enabled:
+          type: boolean
+        lastTriggeredAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [admin, analyst, viewer]
+        lastLogin:
+          type: string
+          format: date-time
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time

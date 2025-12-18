@@ -23,13 +23,14 @@ const config = {
   },
 
   database: {
-    host: process.env.DB_HOST || 'localhost',
-    port: Number(process.env.DB_PORT) || 3306,
-    name: requireEnv('DB_NAME'),
-    user: requireEnv('DB_USER'),
-    password: requireEnv('DB_PASSWORD'),
-    logging: process.env.DB_LOGGING === 'true',
-  },
+  host: process.env.DB_HOST || 'localhost',
+  port: Number(process.env.DB_PORT) || 3306,
+  name: process.env.NODE_ENV === 'test' ? ':memory:' : process.env.DB_NAME,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  logging: process.env.DB_LOGGING === 'true',
+},
+
 
   security: {
     ingestionToken: requireEnv('INGESTION_TOKEN'),
